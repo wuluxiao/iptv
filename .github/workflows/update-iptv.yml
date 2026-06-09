@@ -1,0 +1,79 @@
+name: Update IPTV
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-iptv
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout IPTV-API
+        uses: actions/checkout@v4
+        with:
+          repository: Guovin/iptv-api
+          ref: master
+          path: .tmp/iptv-api
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        working-directory: .tmp/iptv-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install pipenv
+          pipenv --python 3.13
+          pipenv install --deploy
+
+      - name: Apply user config
+        run: |
+          cp config/user_config.ini .tmp/iptv-api/config/user_config.ini
+          cp config/user_demo.txt .tmp/iptv-api/config/user_demo.txt
+          cp config/subscribe.txt .tmp/iptv-api/config/subscribe.txt
+          cp config/epg.txt .tmp/iptv-api/config/epg.txt
+
+      - name: Generate playlist
+        working-directory: .tmp/iptv-api
+        run: pipenv run dev
+
+      - name: Publish generated files
+        run: |
+          mkdir -p public
+          cp .tmp/iptv-api/output/user_result.txt public/result.txt
+          if [ -f .tmp/iptv-api/output/user_result.m3u ]; then
+            cp .tmp/iptv-api/output/user_result.m3u public/result.m3u
+          fi
+          if [ -f .tmp/iptv-api/output/result.m3u ]; then
+            cp .tmp/iptv-api/output/result.m3u public/result.m3u
+          fi
+          cp .tmp/iptv-api/config/subscribe.txt config/subscribe.txt
+          cp .tmp/iptv-api/config/epg.txt config/epg.txt
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > public/updated_at.txt
+
+      - name: Commit generated files
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update IPTV playlist"
+          file_pattern: public/result.txt public/result.m3u public/updated_at.txt config/subscribe.txt config/epg.txt

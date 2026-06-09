@@ -1,0 +1,1 @@
+首次运行 GitHub Actions 后会自动生成 result.txt。

@@ -1,0 +1,9 @@
+name = "iptv-playlist"
+main = "src/index.js"
+compatibility_date = "2026-06-09"
+
+[vars]
+GITHUB_USER = "wuluxiao"
+GITHUB_REPO = "iptv"
+GITHUB_BRANCH = "main"
+CACHE_TTL_SECONDS = "1800"
