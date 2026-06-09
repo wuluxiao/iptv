@@ -21,7 +21,19 @@ export default {
     if (route === "/health") {
       return json({
         ok: true,
-        upstream: rawUrl(env, "updated_at.txt")
+        upstream: rawUrl(env, "updated_at.txt"),
+        cacheVersion: env.CACHE_VERSION || "v1",
+        upstreamVersion: upstreamVersion(env)
+      });
+    }
+
+    if (route === "/version") {
+      return json({
+        version: "20260609-1205",
+        cacheVersion: env.CACHE_VERSION || "v1",
+        upstreamVersion: upstreamVersion(env),
+        m3u: rawUrl(env, "result.m3u"),
+        updated: rawUrl(env, "updated_at.txt")
       });
     }
 
@@ -44,13 +56,15 @@ export default {
 async function serveCached(request, env, ctx, fileName, contentType) {
   assertEnv(env);
 
+  const requestUrl = new URL(request.url);
+  const bypassCache = requestUrl.searchParams.has("fresh");
   const cache = caches.default;
   const cacheUrl = new URL(request.url);
-  cacheUrl.pathname = `/__cache/${fileName}`;
+  cacheUrl.pathname = `/__cache/${env.CACHE_VERSION || "v1"}/${fileName}`;
   cacheUrl.search = "";
   const cacheKey = new Request(cacheUrl.toString(), request);
 
-  const cached = await cache.match(cacheKey);
+  const cached = bypassCache ? null : await cache.match(cacheKey);
   if (cached) {
     return withHeaders(cached, contentType, "HIT");
   }
@@ -76,12 +90,14 @@ async function serveCached(request, env, ctx, fileName, contentType) {
       ...TEXT_HEADERS,
       "content-type": contentType,
       "cache-control": `public, max-age=${ttl(env)}`,
-      "x-iptv-cache": "MISS",
+      "x-iptv-cache": bypassCache ? "BYPASS" : "MISS",
       "x-iptv-upstream": rawUrl(env, fileName)
     }
   });
 
-  ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  if (!bypassCache) {
+    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  }
   return response;
 }
 
@@ -89,7 +105,13 @@ function rawUrl(env, fileName) {
   const user = env.GITHUB_USER;
   const repo = env.GITHUB_REPO;
   const branch = env.GITHUB_BRANCH || "main";
-  return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/public/${fileName}`;
+  const version = upstreamVersion(env);
+  return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/public/${fileName}?v=${encodeURIComponent(version)}`;
+}
+
+function upstreamVersion(env) {
+  const bucketMs = ttl(env) * 1000;
+  return Math.floor(Date.now() / bucketMs).toString();
 }
 
 function assertEnv(env) {
