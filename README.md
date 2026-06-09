@@ -21,7 +21,7 @@
 ```toml
 GITHUB_USER = "你的GitHub用户名"
 GITHUB_REPO = "你的仓库名"
-GITHUB_BRANCH = "main"
+GITHUB_BRANCH = "master"
 ```
 
 4. 进入 GitHub 仓库的 `Actions`，手动运行 `Update IPTV`。
